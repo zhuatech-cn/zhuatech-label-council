@@ -19,7 +19,12 @@ def smoke():
             port = sock.getsockname()[1]
         base = "http://127.0.0.1:" + str(port)
         password = secrets.token_urlsafe(24)
-        env = dict(os.environ, PORT=str(port), BIND_ADDRESS="127.0.0.1", ADMIN_PASSWORD=password,
+        # Inherit only the runtime, never Spring/JDBC overrides or production JVM options.
+        runtime={k:v for k,v in os.environ.items() if k.upper() in {
+            "JAVA_HOME","PATH","HOME","USERPROFILE","SYSTEMROOT","WINDIR","COMSPEC","PATHEXT",
+            "TMPDIR","TEMP","TMP","LANG","LC_ALL","LC_CTYPE","TZ"}}
+        env = dict(runtime, SPRING_CONFIG_LOCATION="classpath:/application.properties",
+                   PORT=str(port), BIND_ADDRESS="127.0.0.1", ADMIN_PASSWORD=password,
                    DB_USER="sa", DB_PASSWORD="", DB_URL="jdbc:h2:file:"+str(Path(tmp)/"db")+";MODE=MySQL;DATABASE_TO_LOWER=TRUE")
         def call(path, method="GET", data=None, token=None, key=None):
             headers = {"Content-Type":"application/json"}
