@@ -50,6 +50,7 @@ def smoke():
             p=None
             try:
                 p=boot()
+                subprocess.run([sys.executable,str(ROOT/'scripts/check-service.py')],cwd=ROOT,env=env,check=True,timeout=10)
                 for path in ("/","/app.js","/style.css"):
                     with urlopen(base+path,timeout=5) as res:assert res.status==200 and res.read()
                 cat=call("/catalog.json")

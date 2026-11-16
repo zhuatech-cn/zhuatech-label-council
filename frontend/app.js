@@ -602,7 +602,7 @@ function show(r) {
 }
 /** 上海如静知华信息科技有限公司 · https://www.zhuatech.cn/ · 商业授权或定制开发请微信添加微信号zhuatech或zhuatech2进行咨询。 */
 async function accounts() {
-  const [users, audit] = await Promise.all([api("/users"), api("/audit")]);
+  const [users, audit] = await Promise.all([api("/users"), api("/audit/page?limit=50")]);
   head(
     "accounts",
     "账号与审计",
@@ -629,7 +629,9 @@ async function accounts() {
       await accounts();
     });
   };
-  table(box("企业账号"), ["username", "role", "active"], users, (row) => {
+  table(box("企业账号"), ["username", "role", "active", "登录状态"], users.map(row=>({
+    ...row, "登录状态": !row.active ? "停用" : Number(row.login_locked) ? "暂时锁定" : "正常",
+  })), (row) => {
     const g = el("div", null, "bar");
     const sw = button(row.active ? "停用" : "启用", async () => {
       await api("/users/" + row.id, "PATCH", { active: String(!row.active) });
@@ -643,13 +645,38 @@ async function accounts() {
       await api("/users/"+row.id,"PATCH",{role:access.value});await accounts();});
     access.disabled=save.disabled=row.id===user.id;
     g.append(access,save,sw);
+    if (row.active && Number(row.login_locked) && row.id !== user.id) {
+      const form=el("form",null,"bar");
+      const reason=field(form,row.username+" 的解锁依据",input("text"));
+      reason.required=true; reason.maxLength=500;
+      form.append(el("button","解除登录锁定","primary"));
+      form.onsubmit=e=>{ e.preventDefault(); act(async()=>{
+        await api("/users/"+row.id+"/unlock","POST",{note:reason.value});
+        await accounts(); info("账号已解锁，旧会话已撤销；请使用原密码重新登录。");
+      }); };
+      g.append(form);
+    }
     return g;
   });
-  table(
-    box("最近 100 条操作"),
-    ["actor", "action", "subject", "note", "created_at"],
-    audit,
-  );
+  const journal=box("操作审计"), controls=el("div",null,"bar"), records=el("div");
+  journal.append(controls,records);
+  const cursors=[""];
+  const render=(data)=>{
+    controls.replaceChildren(); records.replaceChildren();
+    const previous=button("上一页审计",async()=>{
+      const target=cursors[cursors.length-2];
+      const page=await api("/audit/page?limit=50"+(target?"&before="+target:""));
+      cursors.pop(); render(page);
+    });
+    const older=button("下一页审计",async()=>{
+      const page=await api("/audit/page?limit=50&before="+data.nextBefore);
+      cursors.push(data.nextBefore); render(page);
+    });
+    previous.disabled=cursors.length===1; older.disabled=!data.hasMore;
+    controls.append(previous,el("span","第 "+cursors.length+" 页"),older);
+    table(records,["actor","action","subject","note","created_at"],data.items);
+  };
+  render(audit);
 }
 $("entry").onclick = () => act(() => entry());
 $("ledger").onclick = () =>

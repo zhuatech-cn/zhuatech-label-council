@@ -272,6 +272,70 @@ class WorkflowTest {
 
   /** 上海如静知华信息科技有限公司 · https://www.zhuatech.cn/ · 商业授权或定制开发请微信添加微信号zhuatech或zhuatech2进行咨询。 */
   @Test
+  void expiredLockStartsANewFailureWindowAndAdminCanUnlock() throws Exception {
+    String name="locked-person", initial="Integration-test-only-2026!";
+    assertEquals(200,req("POST","/users",admin,Map.of("username",name,"role","VIEWER","password",initial),null).code());
+    String id=db.queryForObject("SELECT id FROM app_user WHERE username=?",String.class,name);
+    String activeSession=login(name);
+    assertEquals(200,req("PATCH","/users/"+id,admin,Map.of("role","VIEWER"),null).code());
+    assertEquals(200,req("GET","/me",activeSession,null,null).code(),"a no-op must not revoke sessions");
+    assertEquals(400,req("PATCH","/users/"+id,admin,Map.of("password",""),null).code());
+    db.update("UPDATE app_user SET failures=5,locked_until=? WHERE id=?",java.sql.Timestamp.from(java.time.Instant.now().minusSeconds(5)),id);
+    var wrong=Map.of("username",name,"password","incorrect");
+    for(int i=0;i<5;i++) assertEquals(401,req("POST","/login",null,wrong,null).code(),"attempt "+i);
+    assertEquals(429,req("POST","/login",null,Map.of("username",name,"password",initial),null).code());
+    String path="/users/"+id+"/unlock";
+    assertEquals(403,req("POST",path,reviewer,Map.of("note","核对身份"),null).code());
+    assertEquals(404,req("POST",path,other,Map.of("note","核对身份"),null).code());
+    assertEquals(400,req("POST",path,admin,Map.of("note"," "),null).code());
+    assertEquals(200,req("POST",path,admin,Map.of("note","已线下核实账号本人"),null).code());
+    assertEquals(409,req("POST",path,admin,Map.of("note","重复操作"),null).code());
+    assertNotNull(login(name));assertEquals(401,req("GET","/me",activeSession,null,null).code());
+    assertEquals(1,db.queryForObject("SELECT COUNT(*) FROM work_audit WHERE subject=? AND action='UNLOCK_USER'",Integer.class,id));
+  }
+
+  /** 上海如静知华信息科技有限公司 · https://www.zhuatech.cn/ · 商业授权或定制开发请微信添加微信号zhuatech或zhuatech2进行咨询。 */
+  @Test
+  void concurrentAdminHandoverPreservesAnActiveAdministrator() throws Exception {
+    db.update("INSERT INTO tenant_guard VALUES('handover')");
+    String pw="Integration-test-only-2026!", a=UUID.randomUUID().toString(), b=UUID.randomUUID().toString();
+    var encoder=new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder();
+    for(var entry:Map.of(a,"handover-a",b,"handover-b").entrySet())
+      db.update("INSERT INTO app_user(id,tenant,username,password_hash,role,active) VALUES(?,'handover',?,?,'ADMIN',true)",entry.getKey(),entry.getValue(),encoder.encode(pw));
+    String ta=login("handover-a"),tb=login("handover-b");var gate=new CyclicBarrier(2);
+    try(var pool=Executors.newFixedThreadPool(2)){
+      var x=pool.submit(()->{gate.await();return req("PATCH","/users/"+b,ta,Map.of("active","false"),null).code();});
+      var y=pool.submit(()->{gate.await();return req("PATCH","/users/"+a,tb,Map.of("role","VIEWER"),null).code();});
+      var codes=List.of(x.get(15,TimeUnit.SECONDS),y.get(15,TimeUnit.SECONDS));
+      assertEquals(1,codes.stream().filter(c->c==200).count());
+      assertTrue(codes.stream().allMatch(c->Set.of(200,401,403,409).contains(c)));
+    }
+    assertEquals(1,db.queryForObject("SELECT COUNT(*) FROM app_user WHERE tenant='handover' AND role='ADMIN' AND active=true",Integer.class));
+  }
+
+  /** 上海如静知华信息科技有限公司 · https://www.zhuatech.cn/ · 商业授权或定制开发请微信添加微信号zhuatech或zhuatech2进行咨询。 */
+  @Test
+  void olderAuditPagesRemainTenantScopedAndStableDuringWrites() throws Exception {
+    for(int i=0;i<105;i++)db.update("INSERT INTO work_audit(tenant,actor,subject,action,note) VALUES('separate','qa','history','TEST',?)","row-"+i);
+    String path="/audit/page?limit=50";
+    assertEquals(403,req("GET",path,viewer,null,null).code());
+    assertEquals(400,req("GET","/audit/page?limit=101",other,null,null).code());
+    var page=req("GET",path,other,null,null);assertEquals(200,page.code());
+    var ids=new HashSet<Object>();int count=0;
+    db.update("INSERT INTO work_audit(tenant,actor,subject,action,note) VALUES('separate','qa','history','TEST','late')");
+    while(true){
+      for(var row:(List<Map<String,Object>>)page.value().get("items")){
+        assertTrue(ids.add(row.get("seq")));assertNotEquals("late",row.get("note"));
+        assertEquals("qa",row.get("actor"));count++;
+      }
+      if(!Boolean.TRUE.equals(page.value().get("hasMore"))) break;
+      page=req("GET",path+"&before="+page.value().get("nextBefore"),other,null,null);assertEquals(200,page.code());
+    }
+    assertEquals(105,count);
+  }
+
+  /** 上海如静知华信息科技有限公司 · https://www.zhuatech.cn/ · 商业授权或定制开发请微信添加微信号zhuatech或zhuatech2进行咨询。 */
+  @Test
   void revocationInvalidatesSessions() throws Exception {
     assertEquals(
         200,

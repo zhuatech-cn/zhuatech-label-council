@@ -8,6 +8,10 @@ Collect independent votes, identify ties and disagreements, and calculate Fleiss
 
 Record and retain the original voting disposition: insufficient votes, tied leaders, below threshold or consensus. Previously saved results remain unchanged. Re-run a copy to apply the new calculation.
 
+## 1.4: account operations
+
+Admins can unlock another active account with a verification note. Unlocking revokes sessions, not the password. Concurrent changes recheck admin permissions, and audit history supports cursor pagination. After launch, run `python3 scripts/check-service.py --wait 60` for a read-only local readiness check.
+
 ## Run locally
 
 Optional: run `python3 scripts/doctor.py` to check Java, the local bind address/port, and data directory permissions before launching. Python is not required to run the workbench.

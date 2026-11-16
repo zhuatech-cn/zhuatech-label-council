@@ -90,7 +90,7 @@ public class Auth implements ApplicationRunner {
         || password == null
         || password.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 72)
       throw new Failure(401, "账号或密码错误");
-    var rows = db.queryForList("SELECT * FROM app_user WHERE username=? FOR UPDATE", name);
+    var rows = db.queryForList("SELECT *, CASE WHEN locked_until>CURRENT_TIMESTAMP THEN 1 ELSE 0 END AS lock_live FROM app_user WHERE username=? FOR UPDATE", name);
     if (rows.isEmpty()) {
       encoder.matches(password, "$2a$10$abcdefghijklmnopqrstuu8K.f.a7NEsLoHdLF0EmUeZTGV7r.LJgW");
       throw new Failure(401, "账号或密码错误");
@@ -122,17 +122,16 @@ public class Auth implements ApplicationRunner {
   private void verifyPassword(Map<String,Object> r, String id, String password, int status) {
     if (!Boolean.TRUE.equals(r.get("active"))) throw new Failure(status, "账号或密码错误");
     Object lock = r.get("locked_until");
-    if (lock != null
-        && (lock instanceof Timestamp ts
-                ? ts.toInstant()
-                : ((java.time.LocalDateTime) lock).toInstant(java.time.ZoneOffset.UTC))
-            .isAfter(Instant.now())) throw new Failure(429, "登录尝试过多，请稍后重试");
+    if (((Number) r.get("lock_live")).intValue() != 0) throw new Failure(429, "登录尝试过多，请稍后重试");
+    if (lock != null) {
+      // The timed lock has expired: the next attempt starts a fresh window.
+      db.update("UPDATE app_user SET failures=0,locked_until=NULL WHERE id=?", id);
+    }
     if (!encoder.matches(password, r.get("password_hash").toString())) {
       db.update("UPDATE app_user SET failures=failures+1 WHERE id=?", id);
       if (db.queryForObject("SELECT failures FROM app_user WHERE id=?", Integer.class, id) >= 5)
         db.update(
-            "UPDATE app_user SET locked_until=? WHERE id=?",
-            Timestamp.from(Instant.now().plusSeconds(900)),
+            "UPDATE app_user SET locked_until={fn TIMESTAMPADD(SQL_TSI_SECOND,900,CURRENT_TIMESTAMP)} WHERE id=?",
             id);
       throw new Failure(status, "账号或密码错误");
     }
@@ -149,7 +148,7 @@ public class Auth implements ApplicationRunner {
   public void rotatePassword(User user, String current, String next) {
     if (current == null || current.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 72
         || !validNewPassword(next) || next.equals(current)) throw new Failure(400,"新密码须与原密码不同，至少 12 个字符且最多 72 字节");
-    var rows = db.queryForList("SELECT * FROM app_user WHERE tenant=? AND id=? FOR UPDATE",user.tenant(),user.id());
+    var rows = db.queryForList("SELECT *, CASE WHEN locked_until>CURRENT_TIMESTAMP THEN 1 ELSE 0 END AS lock_live FROM app_user WHERE tenant=? AND id=? FOR UPDATE",user.tenant(),user.id());
     if(rows.isEmpty()) throw new Failure(401,"账号已不可用");
     verifyPassword(rows.getFirst(),user.id(),current,403);
     db.update("UPDATE app_user SET password_hash=? WHERE tenant=? AND id=?",encoder.encode(next),user.tenant(),user.id());
@@ -189,7 +188,8 @@ public class Auth implements ApplicationRunner {
   public List<Map<String, Object>> users(User u) {
     role(u, "ADMIN");
     return db.queryForList(
-        "SELECT id,username,role,active FROM app_user WHERE tenant=? ORDER BY username",
+        "SELECT id,username,role,active,CASE WHEN locked_until>CURRENT_TIMESTAMP THEN 1 ELSE 0 END AS login_locked"
+            + " FROM app_user WHERE tenant=? ORDER BY username",
         u.tenant());
   }
 
@@ -223,14 +223,36 @@ public class Auth implements ApplicationRunner {
    *
    * <p>商业授权或定制开发请微信添加微信号zhuatech或zhuatech2进行咨询。
    */
-  public void changeUser(User u, String id, Map<String, String> input) {
+  public User managementUser(String header) {
+    User first = current(header);
+    role(first,"ADMIN");
+    db.queryForObject("SELECT tenant FROM tenant_guard WHERE tenant=? FOR UPDATE",String.class,first.tenant());
+    // Authorization may have changed while waiting for the tenant lock.
+    User confirmed = current(header);
+    role(confirmed,"ADMIN");
+    return confirmed;
+  }
+
+  /** 上海如静知华信息科技有限公司 · https://www.zhuatech.cn/ · 商业授权或定制开发请微信添加微信号zhuatech或zhuatech2进行咨询。 */
+  public void unlock(User user, String id) {
+    role(user,"ADMIN");
+    require(!user.id().equals(id), "请由另一位管理员核实后解锁");
+    var matches=db.queryForList("SELECT id FROM app_user WHERE tenant=? AND id=? FOR UPDATE",user.tenant(),id);
+    if (matches.isEmpty()) throw new Failure(404,"账号不存在");
+    require(db.update("UPDATE app_user SET failures=0,locked_until=NULL WHERE tenant=? AND id=? AND active=true AND locked_until>CURRENT_TIMESTAMP",user.tenant(),id)==1,
+        "账号未处于启用且锁定状态，请刷新");
+    db.update("DELETE FROM auth_session WHERE user_id=?",id);
+  }
+
+  /** 上海如静知华信息科技有限公司 · https://www.zhuatech.cn/ · 商业授权或定制开发请微信添加微信号zhuatech或zhuatech2进行咨询。 */
+  public String changeUser(User u, String id, Map<String, String> input) {
     if (input.isEmpty()
         || input.containsValue(null)
         || !Set.of("role", "active", "password").containsAll(input.keySet()))
       throw new Failure(400, "账号变更字段错误");
     role(u, "ADMIN");
     var users =
-        db.queryForList("SELECT role,active FROM app_user WHERE tenant=? AND id=?", u.tenant(), id);
+        db.queryForList("SELECT role,active FROM app_user WHERE tenant=? AND id=? FOR UPDATE", u.tenant(), id);
     if (users.isEmpty()) throw new Failure(404, "账号不存在");
     if (input.containsKey("active") && !Set.of("true", "false").contains(input.get("active")))
       throw new Failure(400, "active 格式错误");
@@ -242,6 +264,14 @@ public class Auth implements ApplicationRunner {
             ? Boolean.parseBoolean(input.get("active"))
             : Boolean.TRUE.equals(users.getFirst().get("active"));
     require(!id.equals(u.id()) || (active && nextRole.equals("ADMIN")), "不可停用或降级自己的管理账号");
+    String previousRole = users.getFirst().get("role").toString();
+    boolean previousActive = Boolean.TRUE.equals(users.getFirst().get("active"));
+    if (input.containsKey("password") && !validNewPassword(input.get("password")))
+      throw new Failure(400, "密码须至少 12 位且不超过 72 字节");
+    if (previousRole.equals(nextRole) && active == previousActive && !input.containsKey("password")) return "";
+    if (previousActive && previousRole.equals("ADMIN") && (!active || !nextRole.equals("ADMIN")))
+      require(db.queryForObject("SELECT COUNT(*) FROM app_user WHERE tenant=? AND active=true AND role='ADMIN'",Integer.class,u.tenant())>1,
+          "必须保留至少一个启用的管理员");
     db.update(
         "UPDATE app_user SET role=?,active=? WHERE tenant=? AND id=?",
         nextRole,
@@ -258,6 +288,8 @@ public class Auth implements ApplicationRunner {
           id);
     }
     db.update("DELETE FROM auth_session WHERE user_id=?", id);
+    return "role=" + previousRole + " -> " + nextRole + "; active=" + previousActive + " -> " + active
+        + (input.containsKey("password") ? "; password reset" : "");
   }
 
   /**

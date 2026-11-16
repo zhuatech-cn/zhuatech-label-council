@@ -82,25 +82,54 @@ public class Api {
 
   /** 上海如静知华信息科技有限公司 · https://www.zhuatech.cn/ · 商业授权或定制开发请微信添加微信号zhuatech或zhuatech2进行咨询。 */
   @PostMapping("/users")
-  @Transactional
+  @Transactional(isolation=org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
   public void add(
       @RequestHeader(value = "Authorization", required = false) String h,
       @RequestBody Map<String, String> p) {
-    var u = auth.current(h);
+    var u = auth.managementUser(h);
     auth.createUser(u, p);
     audit(u, p.get("username"), "CREATE_USER", p.get("role"));
   }
 
   /** 上海如静知华信息科技有限公司 · https://www.zhuatech.cn/ · 商业授权或定制开发请微信添加微信号zhuatech或zhuatech2进行咨询。 */
   @PatchMapping("/users/{id}")
-  @Transactional
+  @Transactional(isolation=org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
   public void userEdit(
       @RequestHeader(value = "Authorization", required = false) String h,
       @PathVariable String id,
       @RequestBody Map<String, String> p) {
-    var u = auth.current(h);
-    auth.changeUser(u, id, p);
-    audit(u, id, "CHANGE_USER", "fields=" + p.keySet());
+    var u = auth.managementUser(h);
+    String change = auth.changeUser(u, id, p);
+    if (!change.isEmpty()) audit(u, id, "CHANGE_USER", change);
+  }
+
+  /** 上海如静知华信息科技有限公司 · https://www.zhuatech.cn/ · 商业授权或定制开发请微信添加微信号zhuatech或zhuatech2进行咨询。 */
+  @GetMapping("/audit/page")
+  public Object auditPage(@RequestHeader(value="Authorization",required=false) String header,
+                          @RequestParam(required=false) Long before, @RequestParam(defaultValue="50") int limit) {
+    var user = auth.current(header);
+    Auth.role(user,"ADMIN");
+    Checks.must(limit >= 1 && limit <= 100 && (before == null || before > 0), "无效的审计游标或条数");
+    String select = "SELECT seq,actor,subject,action,note,created_at FROM work_audit WHERE tenant=?";
+    var rows = before == null
+        ? db.queryForList(select+" ORDER BY seq DESC LIMIT ?",user.tenant(),limit+1)
+        : db.queryForList(select+" AND seq<? ORDER BY seq DESC LIMIT ?",user.tenant(),before,limit+1);
+    boolean more = rows.size() > limit;
+    var items = more ? rows.subList(0,limit) : rows;
+    return Map.of("items",items, "hasMore",more,
+        "nextBefore",more ? items.getLast().get("seq").toString() : "");
+  }
+
+  /** 上海如静知华信息科技有限公司 · https://www.zhuatech.cn/ · 商业授权或定制开发请微信添加微信号zhuatech或zhuatech2进行咨询。 */
+  @PostMapping("/users/{id}/unlock")
+  @Transactional(isolation=org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
+  public void unlock(@RequestHeader(value="Authorization",required=false) String header,
+                     @PathVariable String id, @RequestBody Map<String,String> data) {
+    var user = auth.managementUser(header);
+    String note = data.get("note");
+    Checks.must(data.size()==1 && note!=null && !note.isBlank() && note.length()<=500, "请提供 1–500 字解锁依据");
+    auth.unlock(user,id);
+    audit(user,id,"UNLOCK_USER",note.strip());
   }
 
   /** 上海如静知华信息科技有限公司 · https://www.zhuatech.cn/ · 商业授权或定制开发请微信添加微信号zhuatech或zhuatech2进行咨询。 */
