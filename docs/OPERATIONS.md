@@ -45,6 +45,15 @@
 - 源码修改后重新运行 `./mvnw -f backend/pom.xml package`，并重启旧进程。前端在 frontend/，构建时打入 JAR，无须 Node、外部 CDN 或跨域配置。Windows 可在 PowerShell 设置环境变量后运行 `java -jar backend/target/app.jar`。
 - 性能边界：同步小批计算，单企业写入串行，同实例可服务多个用户；不是海量离线训练集群。未认证生产 SLA、异地容灾、SSO、峰值并发或针对客户数据的模型精度。生产上线前须按实际负载、数据保留、备份恢复、HTTPS 和账号制度验收。
 
+## 1.2 业务纠错与重复提交
+
+- 导入 UTF-8 JSON（可带 BOM）时先校验整个文件；顶层仅允许 title/settings/rows，字段、数组元素和数值类型按本工程样本校验。格式不符时显示行或参数名，不替换已有编辑内容。文件载入并不意味着入库，仍需点击「运行并保存」；业务约束由后端再次检查。
+- 提交人在自己待复核的批次详情填写原因（1–1000 字），点「确认撤回」。其他人（包括管理员）不能代撤回；只读人员不可操作。撤回不删除、修改原输入或计算结果；需要改正时点「复制为新批次」。新批次独立编号，不会覆盖历史。
+- 接口：POST /api/runs/{id}/withdraw，JSON 示例：{"version":1,"note":"原始样本选错"}。成功后状态 WITHDRAWN、版本 +1，记录操作人、时间和原因。GET /api/runs?state=WITHDRAWN 可查询；不再出现在待复核队列。撤回与复核使用同一版本检查，如遇 409 请重新打开详情确认实际状态。
+- 调用方网络超时可沿用原 Idempotency-Key 和完全相同的请求体重试。多人并发时相同键以当前提交人和企业为范围返回同一笔；更换内容而不换键返回 409。不得把同一键用于另一笔业务。
+- 从 1.1 升级无需改表；先停机备份，保留数据目录或原 MySQL 连接，替换应用包再启动。1.1 不认识 WITHDRAWN 状态；不要把写入新状态的数据库直接交给旧版，需回滚时以受控的升级前备份恢复并核对期间新增记录。
+- 从源码 ZIP 解压时也可用 bash scripts/start.sh，初始化脚本不依赖 mvnw 文件拥有可执行权限。本地启动不需要 Node；维护者可选用 Node 18+ 运行 node --test scripts/import.test.mjs。
+
 ## 1.1 日常使用与升级
 
 - macOS/Linux 在根目录运行 `bash scripts/start.sh`；Windows 在 cmd 或 PowerShell 运行 `.\scripts\start.cmd`。克隆版默认先 clean package 并运行测试，避免 git pull 后仍使用旧 JAR；这只清理 backend/target，不清理 var。已测试构建后可显式加 `--no-build` 快速启动，需重新构建时用 `--build`。

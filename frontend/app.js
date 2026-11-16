@@ -1,4 +1,5 @@
 // 上海如静知华信息科技有限公司 · https://www.zhuatech.cn/
+import { readBatch } from "./batch-import.mjs";
 const $ = (id) => document.getElementById(id),
   cat = await fetch("/catalog.json").then((r) => r.json());
 let token = sessionStorage.getItem("workspace-token") || "",
@@ -10,7 +11,7 @@ let token = sessionStorage.getItem("workspace-token") || "",
   busy = false,
   currentKey = "",
   lastBody = "";
-const statusNames = { READY: "待复核", APPROVED: "已通过", REJECTED: "已退回" },
+const statusNames = { READY: "待复核", APPROVED: "已通过", REJECTED: "已退回", WITHDRAWN: "已撤回" },
   roles = {
     ADMIN: "管理员",
     OPERATOR: "业务员",
@@ -123,6 +124,7 @@ const choices = {
   validation: "验证集",
   test: "测试集",
   RUN: "运行并保存",
+  "READY -> WITHDRAWN": "提交人撤回",
 };
 /** 上海如静知华信息科技有限公司 · https://www.zhuatech.cn/ · 商业授权或定制开发请微信添加微信号zhuatech或zhuatech2进行咨询。 */
 function el(tag, text, cls) {
@@ -369,19 +371,11 @@ function entry(seed) {
       const f = picker.files[0];
       if (!f) return;
       if (f.size > 524288) throw Error("文件上限 512 KiB");
-      const b = JSON.parse(await f.text());
-      if (
-        !b ||
-        typeof b.title !== "string" ||
-        !Array.isArray(b.rows) ||
-        !b.rows.length ||
-        b.rows.length > 200 ||
-        !b.rows.every((r) => r && keys.every((k) => Object.hasOwn(r, k))) ||
-        !b.settings ||
-        !Object.keys(cat.settings).every((k) => Object.hasOwn(b.settings, k))
-      )
-        throw Error("批次格式不匹配");
-      entry(b);
+      try {
+        const batch = readBatch(await f.text(), cat);
+        entry(batch);
+        info("已载入 " + batch.rows.length + " 行，尚未提交。");
+      } finally { picker.value = ""; }
     });
   const end = el("div", null, "bar");
   area.append(end);
@@ -531,6 +525,23 @@ function show(r) {
   );
   if (user.role !== "VIEWER")
     bar.append(button("复制为新批次", () => entry(r.input)));
+  if (r.stage === "READY" && r.actor_id === user.id && user.role !== "VIEWER") {
+    const panel = box("撤回待复核批次");
+    const form = el("form", null, "bar");
+    panel.append(form);
+    const reason = field(form, "撤回原因", input("text"));
+    reason.required = true;
+    reason.maxLength = 1000;
+    form.append(el("button", "确认撤回"));
+    form.onsubmit = (event) => {
+      event.preventDefault();
+      act(async () => {
+        if (!reason.value.trim()) throw Error("请填写撤回原因");
+        show(await api("/runs/" + r.id + "/withdraw", "POST", {version: r.revision, note: reason.value}));
+        info("批次已撤回，原记录保留。需要更正时请复制为新批次。");
+      });
+    };
+  }
   const hist = box("操作记录");
   table(hist, ["actor", "action", "note", "created_at"], r.history);
   if (

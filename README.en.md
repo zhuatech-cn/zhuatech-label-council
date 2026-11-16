@@ -6,6 +6,8 @@ Collect independent votes, identify ties and disagreements, and calculate Fleiss
 
 ## Run locally
 
+**1.2 update:** JSON imports identify the offending row or field instead of silently dropping unknown columns. Authors may withdraw a pending batch with a reason, retain its input and result, and copy it for correction. Concurrent retries with the same submission key and payload resolve to a single record on MySQL.
+
 A full JDK 21 is sufficient for a source build. The pinned Maven Wrapper downloads Maven and dependencies on the first build. Run `bash scripts/start.sh` (macOS/Linux) or `.\scripts\start.cmd` (Windows) in the project root. Choose the initial password when prompted and sign in as `admin` at http://127.0.0.1:19328. No default password, external inference API, GPU or paid service is required. A built JAR only requires Java 21. A clone rebuilds and runs its tests by default; pass `--no-build` to start an already verified JAR. The local H2 file survives restart; MySQL 8.4 is supported for deployments.
 
 ## Workflow and checks

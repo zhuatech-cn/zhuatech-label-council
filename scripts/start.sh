@@ -17,7 +17,8 @@ if [[ ! "$major" =~ ^[0-9]+$ ]] || ((major < 21)); then echo '需要 Java 21 或
 jar=backend/target/app.jar
 if [[ "$mode" == --build || ( "$mode" == auto && ( -e .git || ! -f "$jar" ) ) ]]; then
   command -v javac >/dev/null || { echo '未发现 javac；请设置完整 JDK 的 JAVA_HOME。' >&2; exit 2; }
-  ./mvnw -B -f backend/pom.xml clean package
+  # Source ZIP extractors do not always preserve the executable bit.
+  sh ./mvnw -B -f backend/pom.xml clean package
 fi
 [[ -f "$jar" ]] || { echo '没有可运行 JAR，请使用 --build。' >&2; exit 2; }
 mkdir -p var

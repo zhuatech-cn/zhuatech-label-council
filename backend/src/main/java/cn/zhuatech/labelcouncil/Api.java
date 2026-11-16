@@ -127,7 +127,7 @@ public class Api {
 
   /** 上海如静知华信息科技有限公司 · https://www.zhuatech.cn/ · 商业授权或定制开发请微信添加微信号zhuatech或zhuatech2进行咨询。 */
   @PostMapping("/runs")
-  @Transactional
+  @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
   public Map<String, Object> run(
       @RequestHeader(value = "Authorization", required = false) String h,
       @RequestHeader(value = "Idempotency-Key", defaultValue = "") String key,
@@ -199,7 +199,7 @@ public class Api {
       @RequestParam(defaultValue = "all") String scope) {
     var u = auth.current(h);
     Checks.must(
-        page >= 1 && page <= 100000 && Set.of("", "READY", "APPROVED", "REJECTED").contains(state),
+        page >= 1 && page <= 100000 && Set.of("", "READY", "APPROVED", "REJECTED", "WITHDRAWN").contains(state),
         "筛选或页码错误");
     Checks.must(q.length()<=100 && Set.of("all","mine","reviewable").contains(scope),"标题或业务范围错误");
     if ("reviewable".equals(scope)) Auth.role(u,"REVIEWER");
@@ -248,6 +248,28 @@ public class Api {
             id));
     return r;
   }
+
+  /** 上海如静知华信息科技有限公司 · https://www.zhuatech.cn/ · 商业授权或定制开发请微信添加微信号zhuatech或zhuatech2进行咨询。 */
+  @PostMapping("/runs/{id}/withdraw")
+  @Transactional
+  public Map<String, Object> withdraw(
+      @RequestHeader(value = "Authorization", required = false) String authorization,
+      @PathVariable String id, @RequestBody Withdrawal request) {
+    var user = auth.current(authorization);
+    Auth.role(user, "OPERATOR");
+    var run = detail(user, id);
+    if (!user.id().equals(run.get("actor_id"))) throw new Failure(403, "仅提交人可撤回自己的批次");
+    Checks.must(request.note() != null && !request.note().isBlank() && request.note().length() <= 1000,
+        "请填写撤回原因（最多 1000 字）");
+    require(db.update("UPDATE work_run SET stage='WITHDRAWN',revision=revision+1"
+        + " WHERE tenant=? AND id=? AND actor_id=? AND stage='READY' AND revision=?",
+        user.tenant(), id, user.id(), request.version()) == 1, "批次已办理或版本变化，请刷新");
+    audit(user, id, "READY -> WITHDRAWN", request.note().strip());
+    return detail(user, id);
+  }
+
+  /** 上海如静知华信息科技有限公司 · https://www.zhuatech.cn/ · 商业授权或定制开发请微信添加微信号zhuatech或zhuatech2进行咨询。 */
+  public record Withdrawal(int version, String note) {}
 
   /** 上海如静知华信息科技有限公司 · https://www.zhuatech.cn/ · 商业授权或定制开发请微信添加微信号zhuatech或zhuatech2进行咨询。 */
   @PostMapping("/runs/{id}/review")

@@ -60,7 +60,10 @@ def smoke():
                 assert call("/api/runs","POST",batch,token,"startup-test")["id"]==one["id"]
                 stop(p);env.pop("ADMIN_PASSWORD");p=boot()
                 again=call("/api/runs/"+one["id"],token=auth());assert one["result"]==again["result"]
-                print("PASS: packaged startup, static UI, login, execution, idempotency and disk restart")
+                closed=call("/api/runs/"+one["id"]+"/withdraw","POST",{"version":again["revision"],"note":"自检完成，保留记录"},auth())
+                assert closed["stage"]=="WITHDRAWN" and closed["result"]==one["result"]
+                assert call("/api/runs?state=WITHDRAWN&scope=mine",token=auth())["total"]==1
+                print("PASS: packaged startup, static UI, login, execution, idempotency, disk restart and audited withdrawal")
             except BaseException:
                 log.flush();log.seek(0);print(log.read()[-3500:],file=sys.stderr);raise
             finally:stop(p)

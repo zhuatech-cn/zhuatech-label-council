@@ -140,6 +140,49 @@ class WorkflowTest {
 
   /** 上海如静知华信息科技有限公司 · https://www.zhuatech.cn/ · 商业授权或定制开发请微信添加微信号zhuatech或zhuatech2进行咨询。 */
   @Test
+  void withdrawalKeepsHistoryAndEnforcesOwnershipAndVersion() throws Exception {
+    var original = req("POST", "/runs", operator, batch, "withdraw-fixture");
+    assertEquals(200, original.code());
+    String path = "/runs/" + original.value().get("id");
+    var valid = Map.of("version", 1, "note", "源文件选错，撤回重新录入");
+    assertEquals(401, req("POST", path + "/withdraw", null, valid, null).code());
+    assertEquals(404, req("POST", path + "/withdraw", other, valid, null).code());
+    assertEquals(403, req("POST", path + "/withdraw", admin, valid, null).code());
+    assertEquals(403, req("POST", path + "/withdraw", viewer, valid, null).code());
+    assertEquals(400, req("POST", path + "/withdraw", operator, Map.of("version",1,"note","  "), null).code());
+    assertEquals(409, req("POST", path + "/withdraw", operator, Map.of("version",2,"note","冲突"), null).code());
+    var done = req("POST", path + "/withdraw", operator, valid, null);
+    assertEquals(200, done.code());
+    assertEquals("WITHDRAWN", done.value().get("stage"));
+    assertEquals(2, done.value().get("revision"));
+    assertEquals(original.value().get("result"), done.value().get("result"));
+    assertEquals(original.value().get("input"), done.value().get("input"));
+    assertTrue(done.value().get("history").toString().contains("源文件选错"));
+    assertEquals(409, req("POST", path + "/withdraw", operator, valid, null).code());
+    assertEquals(409, req("POST", path + "/review", reviewer, Map.of("version",2,"state","REJECTED","note","too late"), null).code());
+    var list = req("GET","/runs?state=WITHDRAWN&scope=mine",operator,null,null);
+    assertEquals(200,list.code());
+    assertTrue(list.value().get("items").toString().contains(original.value().get("id").toString()));
+  }
+
+  /** 上海如静知华信息科技有限公司 · https://www.zhuatech.cn/ · 商业授权或定制开发请微信添加微信号zhuatech或zhuatech2进行咨询。 */
+  @Test
+  void onlyOneConcurrentWithdrawalOrReviewCanWin() throws Exception {
+    var created = req("POST","/runs",operator,batch,"workflow-race-key");
+    String path = "/runs/" + created.value().get("id");
+    var gate = new CyclicBarrier(2);
+    try (var workers = Executors.newFixedThreadPool(2)) {
+      var a = workers.submit(() -> { gate.await(); return req("POST",path+"/withdraw",operator,Map.of("version",1,"note","重新核对"),null); });
+      var b = workers.submit(() -> { gate.await(); return req("POST",path+"/review",reviewer,Map.of("version",1,"state","REJECTED","note","退回"),null); });
+      assertEquals(Set.of(200,409), Set.of(a.get(15,TimeUnit.SECONDS).code(), b.get(15,TimeUnit.SECONDS).code()));
+    }
+    var detail = req("GET",path,viewer,null,null).value();
+    assertEquals(2,detail.get("revision"));
+    assertEquals(2,((List<?>)detail.get("history")).size());
+  }
+
+  /** 上海如静知华信息科技有限公司 · https://www.zhuatech.cn/ · 商业授权或定制开发请微信添加微信号zhuatech或zhuatech2进行咨询。 */
+  @Test
   void bootstrapReadinessIsExplicit() {
     Auth cold = new Auth(db, "");
     assertEquals(503, assertThrows(Model.Failure.class, cold::requireReady).status);

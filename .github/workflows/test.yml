@@ -19,4 +19,5 @@ jobs:
         run: ./mvnw -B -f backend/pom.xml clean package
       - if: runner.os == 'Windows'
         run: .\mvnw.cmd -B -f backend\pom.xml clean package
+      - run: node --test scripts/import.test.mjs
       - run: python3 scripts/smoke.py
