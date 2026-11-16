@@ -1,0 +1,29 @@
+{
+  "title": "语料标注交付样例",
+  "settings": {
+    "minVotes": 2,
+    "agreement": 0.67
+  },
+  "rows": [
+    {
+      "id": "I1",
+      "annotator": "A",
+      "label": "咨询"
+    },
+    {
+      "id": "I1",
+      "annotator": "B",
+      "label": "咨询"
+    },
+    {
+      "id": "I2",
+      "annotator": "A",
+      "label": "投诉"
+    },
+    {
+      "id": "I2",
+      "annotator": "B",
+      "label": "咨询"
+    }
+  ]
+}

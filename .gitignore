@@ -1,0 +1,7 @@
+.env
+.env.*
+!.env.example
+var/
+backend/target/
+*.log
+.DS_Store

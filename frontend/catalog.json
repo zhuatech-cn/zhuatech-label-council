@@ -1,0 +1,75 @@
+{
+  "title": "知华标注一致性仲裁",
+  "english": "Label Council",
+  "scene": "语料标注交付",
+  "description": "按样本汇集独立投票，输出一致率、多数标签、分歧队列以及适用条件下的 Fleiss κ。",
+  "limit": "仅处理单标签分类；未达票数/一致率的样本保留待人工复核，不冒充金标准。",
+  "settings": {
+    "minVotes": 2,
+    "agreement": 0.67
+  },
+  "rows": [
+    {
+      "id": "I1",
+      "annotator": "A",
+      "label": "咨询"
+    },
+    {
+      "id": "I1",
+      "annotator": "B",
+      "label": "咨询"
+    },
+    {
+      "id": "I2",
+      "annotator": "A",
+      "label": "投诉"
+    },
+    {
+      "id": "I2",
+      "annotator": "B",
+      "label": "咨询"
+    }
+  ],
+  "labels": {
+    "id": "编号",
+    "text": "正文",
+    "unit": "对齐单位",
+    "label": "类别",
+    "minConfidence": "置信度下限",
+    "reference": "参考稿",
+    "hypothesis": "识别稿",
+    "size": "窗口长度",
+    "overlap": "重叠长度",
+    "gpuGiB": "设备显存 GiB",
+    "reserveGiB": "预留 GiB",
+    "paramsB": "参数量（十亿）",
+    "weightBits": "权重位宽",
+    "layers": "层数",
+    "kvHeads": "KV 头数",
+    "headDim": "头维度",
+    "kvBytes": "KV 字节数",
+    "context": "上下文长度",
+    "concurrency": "并发数",
+    "group": "来源组",
+    "train": "训练集 %",
+    "validation": "验证集 %",
+    "seed": "划分种子",
+    "vector": "向量",
+    "threshold": "相似度阈值",
+    "k": "排序截断 K",
+    "relevant": "相关文档",
+    "baseline": "基线排行",
+    "candidate": "候选排行",
+    "annotator": "标注员",
+    "minVotes": "最少票数",
+    "agreement": "一致率下限",
+    "parent": "父节点",
+    "start": "开始毫秒",
+    "end": "结束毫秒",
+    "budget": "总预算",
+    "reserve": "回复预留",
+    "tokens": "成本",
+    "value": "价值",
+    "required": "必选"
+  }
+}
