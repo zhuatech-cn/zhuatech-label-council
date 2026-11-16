@@ -63,7 +63,13 @@ def smoke():
                 closed=call("/api/runs/"+one["id"]+"/withdraw","POST",{"version":again["revision"],"note":"自检完成，保留记录"},auth())
                 assert closed["stage"]=="WITHDRAWN" and closed["result"]==one["result"]
                 assert call("/api/runs?state=WITHDRAWN&scope=mine",token=auth())["total"]==1
-                print("PASS: packaged startup, static UI, login, execution, idempotency, disk restart and audited withdrawal")
+                fixture=json.loads((ROOT/"examples/acceptance.json").read_text(encoding="utf8"))
+                result=call("/api/runs","POST",fixture,auth(),"domain-acceptance")["result"]
+                expected=json.loads("{\"needsReview\":1}")
+                assert all(k in result["metrics"] and result["metrics"][k]==v for k,v in expected.items()),result["metrics"]
+                evidence=json.loads("{\"id\":\"I\",\"initialReason\":\"TIE\"}")
+                assert any(all(k in row and row[k]==v for k,v in evidence.items()) for row in result["rows"]),result["rows"]
+                print("PASS: packaged startup, login, execution, idempotency, restart, withdrawal and project-specific acceptance")
             except BaseException:
                 log.flush();log.seek(0);print(log.read()[-3500:],file=sys.stderr);raise
             finally:stop(p)

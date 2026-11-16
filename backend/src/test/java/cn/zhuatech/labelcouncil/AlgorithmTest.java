@@ -37,6 +37,17 @@ class AlgorithmTest {
 
   /** 上海如静知华信息科技有限公司 · https://www.zhuatech.cn/ · 商业授权或定制开发请微信添加微信号zhuatech或zhuatech2进行咨询。 */
   @Test
+  void enterpriseEvidenceAndBoundaries() {
+    var result=Algorithm.compute(Map.of("minVotes",2,"agreement",0.8),List.of(
+        Map.of("id","a","annotator","1","label","X"),Map.of("id","b","annotator","1","label","X"),
+        Map.of("id","b","annotator","2","label","Y"),Map.of("id","c","annotator","1","label","X"),
+        Map.of("id","c","annotator","2","label","X"),Map.of("id","c","annotator","3","label","Y")));
+    var rows=(List<Map<String,Object>>)result.get("rows");
+    assertEquals(List.of("TOO_FEW","TIE","BELOW_THRESHOLD"),rows.stream().map(r->r.get("initialReason")).toList());
+  }
+
+  /** 上海如静知华信息科技有限公司 · https://www.zhuatech.cn/ · 商业授权或定制开发请微信添加微信号zhuatech或zhuatech2进行咨询。 */
+  @Test
   void knownResults() {
     var result = Algorithm.compute(cfg, data);
     var m = (Map<String, Object>) result.get("metrics");

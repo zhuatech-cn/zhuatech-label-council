@@ -56,6 +56,7 @@ const labels = {
   context: "编排正文",
 };
 const resultLabels = {
+  initialReason: "初判依据",
   ...labels,
   ...{
     knownTokens: "词表命中数",
@@ -112,6 +113,10 @@ const resultLabels = {
   },
 };
 const choices = {
+  TOO_FEW: "票数不足",
+  TIE: "最高票并列",
+  BELOW_THRESHOLD: "未达一致率",
+  AGREED: "一致通过",
   KEEP: "保留",
   REVIEW_DUPLICATE: "待查重",
   CONSENSUS: "一致",
@@ -270,7 +275,7 @@ function table(parent, keys, rows, action) {
     for (const k of keys)
       line.insertCell().textContent =
         typeof row[k] === "string" &&
-        ["decision", "action", "reason", "split"].includes(k)
+        ["decision", "action", "reason", "split","reviewReason","capacityStatus","initialReason"].includes(k)
           ? choices[row[k]] || row[k]
           : fmt(row[k]);
     if (action) line.insertCell().append(action(row));

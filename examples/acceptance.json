@@ -1,0 +1,19 @@
+{
+  "title": "标注仲裁分歧依据",
+  "settings": {
+    "minVotes": 2,
+    "agreement": 0.8
+  },
+  "rows": [
+    {
+      "id": "I",
+      "annotator": "A",
+      "label": "X"
+    },
+    {
+      "id": "I",
+      "annotator": "B",
+      "label": "Y"
+    }
+  ]
+}

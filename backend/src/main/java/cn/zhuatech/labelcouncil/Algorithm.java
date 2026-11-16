@@ -60,7 +60,8 @@ final class Algorithm {
               "label",
               winning,
               "decision",
-              pass ? "CONSENSUS" : "REVIEW"));
+              pass ? "CONSENSUS" : "REVIEW",
+              "initialReason", count < minVotes ? "TOO_FEW" : tie ? "TIE" : !pass ? "BELOW_THRESHOLD" : "AGREED"));
     }
     double pe =
         totals.values().stream().mapToDouble(v -> Math.pow((double) v / rows.size(), 2)).sum();

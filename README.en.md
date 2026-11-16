@@ -4,7 +4,13 @@
 
 Collect independent votes, identify ties and disagreements, and calculate Fleiss’ kappa when applicable. A different reviewer must choose an observed label for every unresolved item before releasing the adjudicated result.
 
+## 1.3: business acceptance
+
+Record and retain the original voting disposition: insufficient votes, tied leaders, below threshold or consensus. Previously saved results remain unchanged. Re-run a copy to apply the new calculation.
+
 ## Run locally
+
+Optional: run `python3 scripts/doctor.py` to check Java, the local bind address/port, and data directory permissions before launching. Python is not required to run the workbench.
 
 **1.2 update:** JSON imports identify the offending row or field instead of silently dropping unknown columns. Authors may withdraw a pending batch with a reason, retain its input and result, and copy it for correction. Concurrent retries with the same submission key and payload resolve to a single record on MySQL.
 
