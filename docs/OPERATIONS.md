@@ -37,6 +37,36 @@
 
 计算人和复核人须为不同账号。服务端校验角色；VIEWER 不能发起计算，OPERATOR 不能审批，REVIEWER 可计算及复核，ADMIN 可管理。初始工作区为 default，用户输入不能指定租户。401 先重新登录，403 核对角色与制单人，409 刷新版本，503 等初始化完成。不要在日志、问题单或 URL 中记录密码和令牌。
 
+<a id="local-recovery"></a>
+
+## 1.5 本地库：停机备份与恢复演练
+
+**先确认使用的是哪个库。** 下列操作只适用于本项目内置 H2 文件库，`workspace.mv.db` 是实际数据。默认路径为项目根目录下的 `var/`。不同项目不要共用数据目录。直接启动的环境变量须在终端或服务管理器中设置；把值写入 Compose 的 `.env` 并不会自动导入当前终端。使用自定义 `DB_URL` 或 MySQL 时，本节的维护命令不适用，使用数据库原生备份，在独立库做恢复演练。
+
+1. **从 1.4 首次升级：** 先停掉原服务，将整个原数据目录复制到受控位置，保留一份不再打开的原版副本。旧库尚无项目标识，先核对原工程和业务批次，再让**本项目** 1.5 程序打开工作副本完成 Flyway V3。不要用另一项目初始化这份副本。回退请使用原版程序和保留的原版副本，不要让旧程序操作升级后的库。
+2. **生成和校验备份：** 先正常停止运行中的服务。以下命令在工程根目录执行，示例的 `./var` 要替换为真正的数据目录；备份文件要位于数据目录外。使用自定义 H2 凭据时，提供原 `DB_USER` 和 `DB_PASSWORD`，不要把密码写入命令、日志或工单。
+3. **恢复到新位置：** 目标的父目录须已存在，目标数据目录须不存在（即使空目录也不覆盖）。校验不通过或项目不符会拒绝。备份和恢复都需要支持硬链接的本地文件系统及足够临时磁盘空间，不支持超过 8 GiB 的单个数据库文件。命令失败返回非零，不要跳过报错启动新库。
+
+```bash
+java -jar backend/target/app.jar maintenance backup ./var ./before-upgrade.zhbk
+java -jar backend/target/app.jar maintenance verify ./before-upgrade.zhbk
+java -jar backend/target/app.jar maintenance restore ./before-upgrade.zhbk ./restored-data
+export WORKSPACE_DATA_DIR="$PWD/restored-data"
+export WORKSPACE_REQUIRE_EXISTING=TRUE
+bash scripts/start.sh --no-build
+```
+
+Windows PowerShell 中，上述三个 Java 命令相同；随后执行：
+
+```powershell
+$env:WORKSPACE_DATA_DIR = (Resolve-Path .\restored-data).Path
+$env:WORKSPACE_REQUIRE_EXISTING = 'TRUE'
+.\scripts\start.cmd --no-build
+```
+
+4. **业务验收：** 用原账号重新登录，按备份前的编号核对业务结果、审批与历史；管理员在审计中核对 `RESTORE_LOCAL`，再用可识别的测试批次验证写入。恢复会撤销副本中的全部旧会话，不改密码，不改原库。确认无误后再切换日常启动配置。仅打开已有库的开关不用于全新安装；目录名请勿包含分号。
+5. **保管：** 备份含业务明细及账号密码哈希，**没有加密或数字签名**。SHA-256 用于发现意外损坏，不能证明发送者身份。只恢复来自可信来源的备份；按企业策略限制访问、加密离机保存、设置保留期并定期演练。备份不能代替 MySQL 高可用、异地灾备或容量规划。
+
 ## 运维与故障处理
 
 - 生产入口使用 HTTPS 反向代理；转发同源的 / 和 /api，不要缓存 /api，不要直接暴露应用端口。仅在可信内网按需设置 BIND_ADDRESS。默认数据库为空，不要把测试数据库或 .env 加入仓库。

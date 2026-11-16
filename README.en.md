@@ -12,6 +12,18 @@ Record and retain the original voting disposition: insufficient votes, tied lead
 
 Admins can unlock another active account with a verification note. Unlocking revokes sessions, not the password. Concurrent changes recheck admin permissions, and audit history supports cursor pagination. After launch, run `python3 scripts/check-service.py --wait 60` for a read-only local readiness check.
 
+## 1.5: keep local data across upgrades
+
+On first launch the app can initialize a local database. For an existing installation, set `WORKSPACE_DATA_DIR` to the absolute path of this project's data directory and `WORKSPACE_REQUIRE_EXISTING=TRUE` to prevent accidentally starting an empty database. After stopping the service, run the following with this project's 1.5 JAR:
+
+```sh
+java -jar backend/target/app.jar maintenance backup ./var ./checkpoint.zhbk
+java -jar backend/target/app.jar maintenance verify ./checkpoint.zhbk
+java -jar backend/target/app.jar maintenance restore ./checkpoint.zhbk ./restored-data
+```
+
+Set the data path to the restored directory before restarting. Accounts and business history remain, and all restored sessions require a fresh login. These unencrypted local H2 backups are project-specific; trust the sender and protect the file. For MySQL use native database backup tools.
+
 ## Run locally
 
 Optional: run `python3 scripts/doctor.py` to check Java, the local bind address/port, and data directory permissions before launching. Python is not required to run the workbench.

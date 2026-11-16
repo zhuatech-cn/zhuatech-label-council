@@ -21,5 +21,5 @@ if [[ "$mode" == --build || ( "$mode" == auto && ( -e .git || ! -f "$jar" ) ) ]]
   sh ./mvnw -B -f backend/pom.xml clean package
 fi
 [[ -f "$jar" ]] || { echo '没有可运行 JAR，请使用 --build。' >&2; exit 2; }
-mkdir -p var
+# H2 creates the configured data directory; an existing-data-only startup must not create a database.
 exec java -jar "$jar"

@@ -30,6 +30,10 @@
 
 管理员核实身份后可解除他人的临时登录锁定，不改密码，旧会话随即失效。保存原有角色或状态不会踢用户下线。审计历史可翻页查询，不限最近 100 条。详见[运维说明](docs/OPERATIONS.md)。
 
+## 1.5 · 换目录、升级与恢复
+
+业务数据可独立于源码保存。首次安装仍可直接启动；已有数据升级时，把 `WORKSPACE_DATA_DIR` 指向本项目原数据目录的绝对路径，并设置 `WORKSPACE_REQUIRE_EXISTING=TRUE`，这样路径写错不会创建空库。内置 `maintenance backup / verify / restore` 针对本地 H2，恢复不会覆盖原库。[停机备份、恢复和验收步骤](docs/OPERATIONS.md#local-recovery)。
+
 ## 本地启动
 
 启动后运行 `python3 scripts/check-service.py --wait 60` 可核对本机服务身份、首页和匿名访问限制；直接启动不需要 Python。

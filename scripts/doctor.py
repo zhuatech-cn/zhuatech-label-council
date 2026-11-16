@@ -48,10 +48,20 @@ def main(args):
         errors.append("PORT 须为 1 至 65535 的整数。")
     except OSError:
         errors.append("无法绑定监听地址：请检查 BIND_ADDRESS，或更换已被占用的 PORT。")
-    var=ROOT/"var"
-    storage=var if var.exists() else ROOT
-    if not storage.is_dir() or not os.access(storage,os.W_OK | os.X_OK):
-        errors.append("数据目录 var 不可创建或不可写，请检查解压目录权限。")
+    if not (os.environ.get("DB_URL") or os.environ.get("SPRING_DATASOURCE_URL")):
+        raw=os.environ.get("WORKSPACE_DATA_DIR","./var")
+        var=ROOT/Path(raw)
+        if not raw or ";" in raw or not (Path(raw).is_absolute() or raw.startswith(("./",".\\"))):
+            errors.append("本地数据目录请使用绝对路径或以 ./ 开头的相对路径，不能含分号。")
+        guard=os.environ.get("WORKSPACE_REQUIRE_EXISTING","FALSE").upper()
+        if guard not in ("TRUE","FALSE"):
+            errors.append("WORKSPACE_REQUIRE_EXISTING 只能为 TRUE 或 FALSE。")
+        if guard=="TRUE" and not (var/"workspace.mv.db").is_file():
+            errors.append("已启用仅打开已有文件库，但未找到 workspace.mv.db。")
+        storage=var
+        while not storage.exists() and storage!=storage.parent:storage=storage.parent
+        if not storage.is_dir() or not os.access(storage,os.W_OK | os.X_OK):
+            errors.append("配置的数据目录不可创建或不可写，请检查路径与权限。")
     print("启动方式："+("源码构建" if build else "直接运行 JAR"))
     for reason in errors:print("未通过："+reason)
     if errors:return 1
